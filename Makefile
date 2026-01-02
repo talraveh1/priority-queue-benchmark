@@ -3,6 +3,7 @@
 # B) boost::pairing_heap
 # C) pairing_heap_priqueue
 # D) skiplist_priqueue
+# E) arch-aware heap (int only)
 
 # TEST I: add random elements one by one
 # TESTID:
