@@ -1,0 +1,24 @@
+# Copilot Instructions
+
+- Project goal: benchmark multiple min-priority-queue implementations (std, boost pairing heap, custom pairing heap, skip list) across push/pop workloads and a Dijkstra-like shortest-path workload.
+- Core C++ entrypoint: [testmain.cc](../testmain.cc) selects the queue type and workload via preprocessor macros `TCAND`, `TTYPE`, and `TID` that must be defined at compile time.
+- Build command pattern: `make run cand=<A|B|C|D> type=<I|II> id=<i|ii|iii|iv|v|vi>`; `make` compiles `testmain` with `-Ofast` and macros `TCAND_<X>`, `TTYPE_<Y>`, and `TID_<Z>`; `make run` then executes the binary.
+- Boost dependency: set env `BOOST_PATH` to the Boost include directory before building when using candidate B (boost::heap); compiler is g++.
+- Python harness: [testrun.py](../testrun.py) drives matrix runs via `subprocess.make`; requires pandas and pytest; pytest entrypoints are listed in [README.md](../README.md) (e.g., `pytest testrun.py::test_simple_I -s`).
+- Results: each pytest run writes CSVs under [results/](../results); raw `[TEST] {...}` logs emitted by `testmain` are parsed into DataFrames by `parse_out_to_dict`.
+- Workload I (random push/pop): `value_type` is `int`; sample size `10^(3+id)`; random seed `srand(123)` plus `std::shuffle`; loop alternates random-size pushes and pops until empty; asserts total popped equals inserted.
+- Workload II (shortest path): `value_type` is `NODE_M` from [graph.h](../graph.h); graph has `N` nodes and `2N` random edges with weights in `[0,10]`; Dijkstra-style loop uses the chosen priority queue for the frontier; seed `srand(123)`; distances stored in `dist_info_vec`.
+- Priority-queue options:
+  - A: `std::priority_queue` min-heap wrapper.
+  - B: `boost::heap::pairing_heap` with comparator `compare_item` from [graph.h](../graph.h).
+  - C: custom pairing heap in [pairing_heap_priqueue.h](../pairing_heap_priqueue.h); `push` merges into root, `pop` performs two-pass merge; nodes own keys by value; no decrease-key.
+  - D: skip list in [skiplist_priqueue.h](../skiplist_priqueue.h); `push` inserts maintaining order; `pop` removes head; uses `#pragma omp parallel for` in search/insert/erase; constructors take `(maxlevel=64, proportion=0.5)`.
+- Graph utilities: [graph.h](../graph.h) defines `Graph` adjacency map and distance map; edges are undirected and uniqueness enforced; `compare_item` orders by `dist_to_s`.
+- Timing: `testmain` measures wall-clock microseconds with `std::chrono::steady_clock`; prints `[TEST] {"elapsed_time_us": [...]}`; skipping is not used.
+- Data sizes: `TID` maps to sizes `i..vi -> 1e3 .. 1e8`; be aware that large cases can be slow/memory-heavy.
+- Randomness: seeds are fixed (`srand(123)` and `mt19937 rd()` for shuffling), so runs are reproducible aside from thread scheduling inside skip list.
+- Cleaning: `make clean` removes the `testmain` binary only.
+- Output format contract: Do not change `[TEST]` JSONish lines or column names without updating `parse_out_to_dict` in [testrun.py](../testrun.py); tests expect `elapsed_time_us` to derive ms/s columns.
+- Adding new queues: mirror `TCAND` defines in [testmain.cc](../testmain.cc) and extend `TEST_CAND_ARR` in [testrun.py](../testrun.py); ensure comparator semantics (min-heap) match existing patterns.
+- Performance tuning hotspots: pairing-heap two-pass merge in [pairing_heap_priqueue.h](../pairing_heap_priqueue.h) and skip-list `insert/erase` search loops; `MAX_BATCH_SIZE` is unused and can be removed.
+- CI/tests: no CI config; rely on local `pytest` runs. CSVs under `results/` are treated as outputs, not fixtures.
