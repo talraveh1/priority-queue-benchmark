@@ -17,6 +17,7 @@
 #include "boost/heap/pairing_heap.hpp"
 #include "pairing_heap_priqueue.h"
 #include "skiplist_priqueue.h"
+#include "arch_aware_heap.h"
 
 #define _STR(x) #x
 #define STR(x) _STR(x)
@@ -39,7 +40,7 @@
 
 enum TEST_CAND
 {
-    A,B,C,D
+    A,B,C,D,E
 };
 
 enum TEST_ID
@@ -64,6 +65,11 @@ using chosen_pri_queue = boost::heap::pairing_heap<value_type,boost::heap::compa
 using chosen_pri_queue = pairing_heap_priqueue<value_type>;
 #elif defined(TCAND_D)
 using chosen_pri_queue = skip_list_priqueue<value_type>;
+#elif defined(TCAND_E)
+#if !defined(TTYPE_I)
+#error "Arch-aware heap only supports TTYPE_I (int)"
+#endif
+using chosen_pri_queue = MinHeap;
 #endif
 
 
@@ -80,9 +86,14 @@ int main()
 
     printf("[TEST] {\"cand\": [\"%s\"], \"type\": [\"%s\"], \"id\": [\"%s\"]}\n", STR(TCAND), STR(TTYPE), STR(TID));
 
-    bool skip_test = false;
-    chosen_pri_queue pq;
     const size_t N = sample_size(TID);
+    bool skip_test = false;
+#if defined(TCAND_E)
+    const int depth = MinHeap::minDepthForSize(static_cast<uint32_t>(N));
+    chosen_pri_queue pq(depth);
+#else
+    chosen_pri_queue pq;
+#endif
     printf("[TEST] {\"size\": [%lu]}\n",N);
 
 
