@@ -21,6 +21,7 @@ test result csv is generated to the results folder
 ### B) boost::pairing_heap
 ### C) pairing_heap_priqueue
 ### D) skiplist_priqueue
+### E) arch_aware_heap (type I only, int payload)
 
 ## TEST I: add random elements one by one
 ### TESTID:
@@ -72,6 +73,12 @@ test result csv is generated to the results folder
 | D    | I    | iv  | 1000000   | 1.4865s   | 1.49us          | 692.32ms | 692.32ns  |
 | D    | I    | v   | 10000000  | 29.5455s  | 2.95us          | 7.46s    | 745.89ns  |
 | D    | I    | vi  | 100000000 | 695.3429s | 6.95us          | 76.36s   | 763.64ns  |
+| E    | I    | i   | 1000      | n/a       | n/a             | 28us     | 28ns      |
+| E    | I    | ii  | 10000     | n/a       | n/a             | 398us    | 39.80ns   |
+| E    | I    | iii | 100000    | n/a       | n/a             | 5.305ms  | 53.05ns   |
+| E    | I    | iv  | 1000000   | n/a       | n/a             | 56.990ms | 56.99ns   |
+| E    | I    | v   | 10000000  | n/a       | n/a             | 727.086ms| 72.71ns   |
+| E    | I    | vi  | 100000000 | n/a       | n/a             | 7.717618s| 77.18ns   |
 
 
 #### test_II_result.csv

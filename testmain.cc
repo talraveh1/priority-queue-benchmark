@@ -9,6 +9,22 @@
 #include <queue>
 #include <vector>
 
+// Intel VTune ITT markers
+#ifdef USE_ITT
+#include <ittnotify.h>
+static __itt_domain* g_itt_domain = __itt_domain_create("priqueue.benchmark");
+static __itt_string_handle* g_itt_workload = __itt_string_handle_create("workload");
+inline void itt_task_begin() { __itt_task_begin(g_itt_domain, __itt_null, __itt_null, g_itt_workload); }
+inline void itt_task_end() { __itt_task_end(g_itt_domain); }
+inline void itt_resume() { __itt_resume(); }
+inline void itt_pause() { __itt_pause(); }
+#else
+inline void itt_task_begin() {}
+inline void itt_task_end() {}
+inline void itt_resume() {}
+inline void itt_pause() {}
+#endif
+
 // include for test type II
 #include "graph.h"
 
@@ -109,6 +125,8 @@ int main()
     std::shuffle(v.begin(), v.end(), g);
 
     //// start timer
+    itt_resume();
+    itt_task_begin();
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     while (total_cnt!=0 || !pq.empty()) {
@@ -127,6 +145,8 @@ int main()
         }
     }
     assert(N==total_rm_cnt);
+    itt_task_end();
+    itt_pause();
 
 #endif // TTYPE_I
 
@@ -173,6 +193,8 @@ int main()
  
     
     //// start timer
+    itt_resume();
+    itt_task_begin();
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     pq.push(NODE_M(s,0.0));
@@ -208,6 +230,8 @@ int main()
 #endif // TTYPE_II
 
     assert(pq.size()==0);
+    itt_task_end();
+    itt_pause();
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     uint64_t elapsed_time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();

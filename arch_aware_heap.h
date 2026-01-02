@@ -137,13 +137,13 @@ public:
         return depth;
     }
 
-    inline __attribute__((always_inline)) bool isEmpty() const noexcept { return size == 0u; }
-    inline __attribute__((always_inline)) bool isFull() const noexcept { return size == capacity; }
+    inline __attribute__((always_inline)) bool isEmpty() const noexcept { return size_ == 0u; }
+    inline __attribute__((always_inline)) bool isFull() const noexcept { return size_ == capacity; }
     inline bool empty() const noexcept { return isEmpty(); }
 
     // number of elements currently in the heap
-    int getSize() const noexcept { return static_cast<int>(size); }
-    std::size_t size() const noexcept { return size; }
+    int getSize() const noexcept { return static_cast<int>(size_); }
+    std::size_t size() const noexcept { return size_; }
 
     // maximum number of elements the heap can hold
     int getCapacity() const noexcept { return static_cast<int>(capacity); }
@@ -182,7 +182,7 @@ public:
         }
 
         // insert at the end of the rootless array.
-        uint32_t idx = size - 1u, p;
+        uint32_t idx = size_ - 1u, p;
         int pv;
         heap[idx] = v;
         ++size_;
@@ -267,7 +267,7 @@ public:
         }
 
         // move the last element into the root and sift down
-        const uint32_t nonRootCount = size - 1u;
+        const uint32_t nonRootCount = size_ - 1u;
         int v = heap[nonRootCount];
 
         // hoist pointer once (avoid repeated heap.get())
