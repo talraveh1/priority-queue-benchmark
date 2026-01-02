@@ -2,7 +2,7 @@ import os
 import subprocess
 import pandas as pd
 
-TEST_CAND_ARR = ["A","B","C","D"]
+TEST_CAND_ARR = ["A","B","C","D","E"]
 TEST_TYPE = ["I","II"]
 TEST_ID = ["i","ii","iii","iv","v","vi"]
 RESULT_PATH = "results"

@@ -1,13 +1,11 @@
 #pragma once
 
 #include <algorithm>
-#include <bit>
 #include <cassert>
 #include <cstdint>
 #include <limits>
 #include <memory>
 #include <new>
-#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -16,10 +14,9 @@
 #include <immintrin.h>
 
 template <std::uint32_t Arity>
-class MaxHeapT
+class MinHeapT
 {
     using uint32_t = std::uint32_t;
-    using int64_t = std::int64_t;
 
 public:
     // heap shape (compile-time)
@@ -31,7 +28,7 @@ private:
 
     struct HeapDeleter
     {
-        void operator()(int64_t* p) const noexcept
+        void operator()(int* p) const noexcept
         {
             ::operator delete[](p, std::align_val_t(heap_alignment));
         }
@@ -39,11 +36,11 @@ private:
 
     const int maxDepth;
     const uint32_t capacity;
-    std::unique_ptr<int64_t[], HeapDeleter> heap;
+    std::unique_ptr<int[], HeapDeleter> heap;
 
-    int64_t root{};
+    int root{};
 
-    uint32_t size{0u};
+    uint32_t size_{0u};
 
     static uint64_t pow_u64(uint64_t base, int exp)
     {
@@ -81,7 +78,7 @@ private:
         return static_cast<uint32_t>(cap);
     }
 
-    static __forceinline uint32_t parent(uint32_t idx)
+    static inline __attribute__((always_inline)) uint32_t parent(uint32_t idx)
     {
         // nodes stored in `heap[]` are indexed in level order
         // excluding the root. The root's children are heap[0..arity-1].
@@ -89,115 +86,139 @@ private:
         return (idx / arity) - 1u;
     }
 
-    static __forceinline uint32_t child(uint32_t idx)
+    static inline __attribute__((always_inline)) uint32_t child(uint32_t idx)
     {
         // return the first child of node at index idx in heap[]
         return arity * (idx + 1u);
     }
 
-    static constexpr int pf_hint =
+    static constexpr _mm_hint pf_hint =
         (arity == 2u) ? _MM_HINT_T0 :
         (arity == 4u) ? _MM_HINT_T1 :
                         _MM_HINT_T2;
 
 public:
-    explicit MaxHeapT(int maxDepth) :
+    explicit MinHeapT(int maxDepth) :
         maxDepth(maxDepth), capacity(calcCapacity(maxDepth)),
-        heap(static_cast<int64_t*>(::operator new[](sizeof(int64_t) * capacity, std::align_val_t(heap_alignment))))
+        heap(static_cast<int*>(::operator new[](sizeof(int) * capacity, std::align_val_t(heap_alignment))))
     {
         assert(maxDepth >= 0);
     }
 
-    std::string name() const { return "MaxHeap"; }
+    std::string name() const { return "MinHeap"; }
 
     static bool isPowerOfTwo(unsigned n) { return n > 0 && (n & n - 1) == 0; }
 
     static int getPowerOfTwoExp(unsigned n)
     {
         assert(isPowerOfTwo(n));
-        return std::numeric_limits<unsigned>::digits - 1 - std::countl_zero(n);
+        return std::numeric_limits<unsigned>::digits - 1 - __builtin_clz(n);
     }
 
-    __forceinline bool isEmpty() const noexcept { return size == 0u; }
-    __forceinline bool isFull() const noexcept { return size == capacity; }
+    static int minDepthForSize(uint32_t required)
+    {
+        if (required == 0u)
+            return 0;
+        if (arity < 2)
+            throw std::invalid_argument("arity must be >= 2");
+
+        uint64_t cap = 0;
+        uint64_t level_count = 1;
+        int depth = 0;
+        while (cap < required) {
+            cap += level_count;
+            if (cap >= required)
+                return depth;
+            if (level_count > (std::numeric_limits<uint64_t>::max() / arity))
+                throw std::overflow_error("heap capacity exceeds uint64_t");
+            level_count *= arity;
+            ++depth;
+        }
+        return depth;
+    }
+
+    inline __attribute__((always_inline)) bool isEmpty() const noexcept { return size_ == 0u; }
+    inline __attribute__((always_inline)) bool isFull() const noexcept { return size_ == capacity; }
+    inline bool empty() const noexcept { return isEmpty(); }
 
     // number of elements currently in the heap
-    int getSize() const noexcept { return static_cast<int>(size); }
+    int getSize() const noexcept { return static_cast<int>(size_); }
+    std::size_t size() const noexcept { return size_; }
 
     // maximum number of elements the heap can hold
     int getCapacity() const noexcept { return static_cast<int>(capacity); }
 
-    const int64_t* data() const noexcept { return heap.get(); }
+    const int* data() const noexcept { return heap.get(); }
 
     bool validateHeapProperty() const
     {
-        if (size == 0u || size == 1u)
+        if (size_ == 0u || size_ == 1u)
             return true;
 
-        const uint32_t nonRootCount = size - 1u;
+        const uint32_t nonRootCount = size_ - 1u;
         for (uint32_t c = 0u; c < nonRootCount; ++c) {
-            const int64_t cv = heap[c];
+            const int cv = heap[c];
             if (c < arity) {
-                if (root < cv)
+                if (root > cv)
                     return false;
             } else {
                 const uint32_t p = parent(c);
-                if (heap[p] < cv)
+                if (heap[p] > cv)
                     return false;
             }
         }
         return true;
     }
 
-    bool push(int64_t v)
+    bool push(int v)
     {
         if (isFull())
             return false;
 
-        if (size == 0u) {
+        if (size_ == 0u) {
             root = v;
-            size = 1u;
+            size_ = 1u;
             return true;
         }
 
         // insert at the end of the rootless array.
-        uint32_t idx = size - 1u, p;
-        int64_t pv;
+        uint32_t idx = size_ - 1u, p;
+        int pv;
         heap[idx] = v;
-        ++size;
+        ++size_;
 
         if (idx < 1'048'575u) { // heaps of up to 20 levels
             // branchless lifting
             while (idx >= arity) {
                 p = parent(idx);
                 pv = heap[p];
-                heap[idx] = std::min(v, pv);
-                v = std::max(v, pv);
+                heap[idx] = std::max(v, pv);
+                v = std::min(v, pv);
                 idx = p;
             }
         } else { // heaps deeper than 20 levels
             // perform branchless lifting (avoids long paths)
             p = parent(idx);
             pv = heap[p];
-            heap[idx] = std::min(v, pv);
-            v = std::max(v, pv);
+            heap[idx] = std::max(v, pv);
+            v = std::min(v, pv);
             idx = p;
             p = parent(idx);
             pv = heap[p];
-            heap[idx] = std::min(v, pv);
-            v = std::max(v, pv);
+            heap[idx] = std::max(v, pv);
+            v = std::min(v, pv);
             idx = p;
             p = parent(idx);
             pv = heap[p];
-            heap[idx] = std::min(v, pv);
-            v = std::max(v, pv);
+            heap[idx] = std::max(v, pv);
+            v = std::min(v, pv);
             idx = p;
                         
             // switch to a branchy approach thereafter
             while (idx >= arity) {
                 p = parent(idx);
                 pv = heap[p];
-                if (v <= pv)
+                if (v >= pv)
                     break;
                 heap[idx] = pv;
                 idx = p;
@@ -205,13 +226,13 @@ public:
         }
 
         // finalize against the root or the current position
-        heap[idx] = std::min(v, root);
-        root = std::max(v, root);
+        heap[idx] = std::max(v, root);
+        root = std::min(v, root);
 
         return true;
     }
 
-    int64_t top() const
+    int top() const
     {
         if (isEmpty())
             throw std::runtime_error("empty heap");
@@ -220,11 +241,11 @@ public:
     }
 
     template <bool Condition, class V, class I>
-    __forceinline void update_best_if(const V* __restrict heapPtr, I i, I& b, V& bv) noexcept
+    inline __attribute__((always_inline)) void update_best_if(const V* __restrict heapPtr, I i, I& b, V& bv) noexcept
     {
         if constexpr (Condition) {
             const V v = heapPtr[i];
-            if (v > bv) {
+            if (v < bv) {
                 b = i;
                 bv = v;
             }
@@ -236,34 +257,34 @@ public:
         if (isEmpty())
             return false;
 
-        if (--size == 0u)
+        if (--size_ == 0u)
             return true;
 
         // if we popped the root from a 2-element heap, promote the only child.
-        if (size == 1u) {
+        if (size_ == 1u) {
             root = heap[0u];
             return true;
         }
 
         // move the last element into the root and sift down
-        const uint32_t nonRootCount = size - 1u;
-        int64_t v = heap[nonRootCount];
+        const uint32_t nonRootCount = size_ - 1u;
+        int v = heap[nonRootCount];
 
         // hoist pointer once (avoid repeated heap.get())
-        int64_t* __restrict h = heap.get();
+        int* __restrict h = heap.get();
 
         auto prefetch_children_block = [&](uint32_t node) noexcept {
             // Prefetch the children block of `node` (one cache line in your layout).
             _mm_prefetch(reinterpret_cast<const char*>(h + child(node)), pf_hint);
         };
 
-        // root step: choose the max among root's children at heap[0..arity-1].
+        // root step: choose the min among root's children at heap[0..arity-1].
         uint32_t best = 0u;
-        int64_t bestVal = heap[0u];
+        int bestVal = heap[0u];
 
         if (nonRootCount < arity) {
             for (uint32_t i = 1u; i < nonRootCount; ++i)
-                if (heap[i] > bestVal)
+                if (heap[i] < bestVal)
                     bestVal = heap[i], best = i;
         } else {
             // unroll the first arity comparisons
@@ -276,13 +297,13 @@ public:
             update_best_if<arity >= 8u>(h, 7u, best, bestVal);
         }
 
-        // if the last element is larger than the max child, we're done
-        if (v >= bestVal) {
+        // if the last element is smaller than the min child, we're done
+        if (v <= bestVal) {
             root = v;
             return true;
         }
 
-        // promote the max child to the root
+        // promote the min child to the root
         root = bestVal;
         uint32_t hole = best;
 
@@ -310,7 +331,7 @@ public:
             const uint32_t remaining = nonRootCount - first;
             if (remaining < arity) {
                 for (uint32_t i = first + 1u; i < nonRootCount; ++i)
-                    if (heap[i] > bestVal)
+                    if (heap[i] < bestVal)
                         bestVal = heap[i], best = i;
             } else {
                 // unroll the comparisons
@@ -329,7 +350,7 @@ public:
                 prefetch_children_block(best);
             }
 
-            if (v >= bestVal)
+            if (v <= bestVal)
                 break;
 
             h[hole] = bestVal;
@@ -342,8 +363,8 @@ public:
     }
 };
 
-#ifndef NHPQ_MAXHEAP_ARITY
-#define NHPQ_MAXHEAP_ARITY 2u
+#ifndef NHPQ_MINHEAP_ARITY
+#define NHPQ_MINHEAP_ARITY 2u
 #endif
 
-using MaxHeap = MaxHeapT<NHPQ_MAXHEAP_ARITY>;
+using MinHeap = MinHeapT<NHPQ_MINHEAP_ARITY>;
