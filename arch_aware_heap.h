@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <bit>
 #include <cassert>
 #include <cstdint>
 #include <limits>
@@ -41,7 +40,7 @@ private:
 
     int root{};
 
-    uint32_t size{0u};
+    uint32_t size_{0u};
 
     static uint64_t pow_u64(uint64_t base, int exp)
     {
@@ -93,7 +92,7 @@ private:
         return arity * (idx + 1u);
     }
 
-    static constexpr int pf_hint =
+    static constexpr _mm_hint pf_hint =
         (arity == 2u) ? _MM_HINT_T0 :
         (arity == 4u) ? _MM_HINT_T1 :
                         _MM_HINT_T2;
@@ -113,7 +112,7 @@ public:
     static int getPowerOfTwoExp(unsigned n)
     {
         assert(isPowerOfTwo(n));
-        return std::numeric_limits<unsigned>::digits - 1 - std::countl_zero(n);
+        return std::numeric_limits<unsigned>::digits - 1 - __builtin_clz(n);
     }
 
     static int minDepthForSize(uint32_t required)
@@ -153,10 +152,10 @@ public:
 
     bool validateHeapProperty() const
     {
-        if (size == 0u || size == 1u)
+        if (size_ == 0u || size_ == 1u)
             return true;
 
-        const uint32_t nonRootCount = size - 1u;
+        const uint32_t nonRootCount = size_ - 1u;
         for (uint32_t c = 0u; c < nonRootCount; ++c) {
             const int cv = heap[c];
             if (c < arity) {
@@ -176,9 +175,9 @@ public:
         if (isFull())
             return false;
 
-        if (size == 0u) {
+        if (size_ == 0u) {
             root = v;
-            size = 1u;
+            size_ = 1u;
             return true;
         }
 
@@ -186,7 +185,7 @@ public:
         uint32_t idx = size - 1u, p;
         int pv;
         heap[idx] = v;
-        ++size;
+        ++size_;
 
         if (idx < 1'048'575u) { // heaps of up to 20 levels
             // branchless lifting
@@ -258,11 +257,11 @@ public:
         if (isEmpty())
             return false;
 
-        if (--size == 0u)
+        if (--size_ == 0u)
             return true;
 
         // if we popped the root from a 2-element heap, promote the only child.
-        if (size == 1u) {
+        if (size_ == 1u) {
             root = heap[0u];
             return true;
         }
